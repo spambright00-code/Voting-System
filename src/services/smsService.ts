@@ -1,4 +1,5 @@
-import { ElectionSettings } from '../types';
+
+import { ElectionSettings } from '../../types';
 
 /**
  * Generates a cryptographically strong 6-digit OTP.

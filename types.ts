@@ -35,6 +35,8 @@ export interface Voter {
   county: string;
   status: VoterStatus;
   otp?: string; // Transient OTP for verification
+  otpTimestamp?: number; // Timestamp for OTP generation to handle expiration
+  verifiedAt?: string; // ISO timestamp of when verification occurred
   votingSubCounty?: string;
 }
 

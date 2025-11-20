@@ -1,3 +1,4 @@
+
 import { Candidate, Voter, VoterStatus } from './types';
 
 export const SUBCOUNTIES = [
@@ -11,6 +12,35 @@ export const SUBCOUNTIES = [
   "Chonyi"
 ];
 
+// Security Constants
+export const OTP_EXPIRY_MINUTES = 5;
+export const MAX_OTP_ATTEMPTS = 3;
+export const PHASE_CHECK_INTERVAL_MS = 10_000;
+export const ID_RANDOM_LENGTH = 9;
+export const MAX_PROMPT_LENGTH = 2000;
+
+// AI Constants
+export const AI_MODEL = "gemini-2.5-flash";
+export const AI_PROMPTS = [
+  "Draft an SMS to remind unverified voters to register.",
+  "Summarize the current voter turnout.",
+  "Write a thank you message for after the election.",
+  "Analyze the distribution of voters by ward."
+];
+
+// Safely access environment variable
+const getEnv = () => {
+  try {
+    // @ts-ignore
+    return import.meta.env || {};
+  } catch {
+    return {};
+  }
+};
+
+export const ADMIN_PASSWORD = (getEnv() as any).VITE_ADMIN_PASSWORD || 'admin';
+
+// Demo Data (Keep for fallback/initialization if DB is empty)
 export const MOCK_CANDIDATES: Candidate[] = [
   {
     id: 'c1',
@@ -66,82 +96,7 @@ export const INITIAL_VOTERS: Voter[] = [
     constituency: 'Dagoretti North',
     county: 'Nairobi',
     status: VoterStatus.VERIFIED,
-    otp: '123456',
-    votingSubCounty: 'Kilifi North'
-  },
-  {
-    id: 'v3',
-    membershipId: 'MEM003',
-    name: 'Fatuma Ahmed',
-    phone: '+254700000003',
-    ward: 'Eastleigh',
-    constituency: 'Kamukunji',
-    county: 'Nairobi',
-    status: VoterStatus.VOTED,
-    votingSubCounty: 'Malindi'
-  },
-  {
-    id: 'v4',
-    membershipId: 'MEM004',
-    name: 'David Kimani',
-    phone: '+254700000004',
-    ward: 'Westlands',
-    constituency: 'Westlands',
-    county: 'Nairobi',
-    status: VoterStatus.VERIFIED,
-    otp: '654321',
-    votingSubCounty: 'Ganze'
-  },
-  {
-    id: 'v5',
-    membershipId: 'MEM005',
-    name: 'Lucy Wanjiku',
-    phone: '+254700000005',
-    ward: 'Kilimani',
-    constituency: 'Dagoretti North',
-    county: 'Nairobi',
-    status: VoterStatus.UNVERIFIED
-  },
-  {
-    id: 'v6',
-    membershipId: 'MEM006',
-    name: 'Mohammed Ali',
-    phone: '+254700000006',
-    ward: 'Eastleigh',
-    constituency: 'Kamukunji',
-    county: 'Nairobi',
-    status: VoterStatus.VERIFIED,
-    otp: '987654',
-    votingSubCounty: 'Rabai'
-  },
-  {
-    id: 'v7',
-    membershipId: 'MEM007',
-    name: 'John Doe',
-    phone: '+254700000007',
-    ward: 'Westlands',
-    constituency: 'Westlands',
-    county: 'Nairobi',
-    status: VoterStatus.VOTED,
-    votingSubCounty: 'Chonyi'
-  },
-  {
-    id: 'v8',
-    membershipId: 'MEM008',
-    name: 'Esther Muli',
-    phone: '+254700000008',
-    ward: 'Karen',
-    constituency: 'Langata',
-    county: 'Nairobi',
-    status: VoterStatus.UNVERIFIED
+    votingSubCounty: 'Kilifi North',
+    verifiedAt: new Date().toISOString()
   }
-];
-
-export const ADMIN_PASSWORD = 'admin';
-
-export const AI_PROMPTS = [
-  "Draft an SMS to remind unverified voters to register.",
-  "Summarize the current voter turnout.",
-  "Write a thank you message for after the election.",
-  "Analyze the distribution of voters by ward."
 ];
