@@ -316,14 +316,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                    <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 text-white shadow-xl shadow-slate-900/20">
                       <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Quick Actions</h4>
                       <div className="grid grid-cols-2 gap-3">
-                        <button className="bg-white/10 hover:bg-white/20 border border-white/10 p-3 rounded-xl text-left transition-all group" onClick={() => setActiveTab('voters')}>
+                        <Button className="bg-white/10 hover:bg-white/20 border border-white/10 p-3 rounded-xl text-left transition-all group" onClick={() => setActiveTab('voters')}>
                           <Users className="w-5 h-5 mb-2 text-blue-300 group-hover:scale-110 transition-transform" />
                           <span className="text-xs font-bold block">Manage Voters</span>
-                        </button>
-                        <button className="bg-white/10 hover:bg-white/20 border border-white/10 p-3 rounded-xl text-left transition-all group" onClick={() => setActiveTab('settings')}>
+                        </Button>
+                        <Button className="bg-white/10 hover:bg-white/20 border border-white/10 p-3 rounded-xl text-left transition-all group" onClick={() => setActiveTab('settings')}>
                           <BarChart3 className="w-5 h-5 mb-2 text-purple-300 group-hover:scale-110 transition-transform" />
                           <span className="text-xs font-bold block">View Logs</span>
-                        </button>
+                        </Button>
                       </div>
                    </div>
                  </div>

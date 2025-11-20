@@ -38,65 +38,9 @@ const getEnv = () => {
   }
 };
 
-export const ADMIN_PASSWORD = (getEnv() as any).VITE_ADMIN_PASSWORD || 'admin';
+export const ADMIN_PASSWORD = (getEnv() as any).VITE_ADMIN_PASSWORD;
 
-// Demo Data (Keep for fallback/initialization if DB is empty)
-export const MOCK_CANDIDATES: Candidate[] = [
-  {
-    id: 'c1',
-    name: 'Alice Mwangi',
-    position: 'Chairperson',
-    party: 'Progressive Teachers',
-    avatarUrl: 'https://picsum.photos/200/200?random=1',
-    subCounty: 'All'
-  },
-  {
-    id: 'c2',
-    name: 'John Kamau',
-    position: 'Chairperson',
-    party: 'United Welfare',
-    avatarUrl: 'https://picsum.photos/200/200?random=2',
-    subCounty: 'All'
-  },
-  {
-    id: 'c3',
-    name: 'Sarah Ochieng',
-    position: 'Treasurer',
-    party: 'Progressive Teachers',
-    avatarUrl: 'https://picsum.photos/200/200?random=3',
-    subCounty: 'All'
-  },
-  {
-    id: 'c4',
-    name: 'David Koech',
-    position: 'Treasurer',
-    party: 'United Welfare',
-    avatarUrl: 'https://picsum.photos/200/200?random=4',
-    subCounty: 'All'
-  }
-];
-
-export const INITIAL_VOTERS: Voter[] = [
-  {
-    id: 'v1',
-    membershipId: 'MEM001',
-    name: 'Grace Njeri',
-    phone: '+254700000001',
-    ward: 'Westlands',
-    constituency: 'Westlands',
-    county: 'Nairobi',
-    status: VoterStatus.UNVERIFIED
-  },
-  {
-    id: 'v2',
-    membershipId: 'MEM002',
-    name: 'Samuel Otieno',
-    phone: '+254700000002',
-    ward: 'Kilimani',
-    constituency: 'Dagoretti North',
-    county: 'Nairobi',
-    status: VoterStatus.VERIFIED,
-    votingSubCounty: 'Kilifi North',
-    verifiedAt: new Date().toISOString()
-  }
-];
+// Demo Data has been removed for security.
+// Voter and candidate data should be loaded from a secure, external source.
+export const MOCK_CANDIDATES: Candidate[] = [];
+export const INITIAL_VOTERS: Voter[] = [];
