@@ -17,6 +17,12 @@ export interface ElectionSettings {
   organizationName: string;
   smsApiKey?: string;
   smsSenderId?: string;
+  // Scheduling
+  enableAutoSchedule?: boolean;
+  verificationStartTime?: string;
+  verificationEndTime?: string;
+  votingStartTime?: string;
+  votingEndTime?: string;
 }
 
 export interface Voter {

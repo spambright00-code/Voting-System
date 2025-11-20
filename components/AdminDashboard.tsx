@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
-import { Users, FileCheck, Settings, AlertTriangle, Download, Search, Filter, RefreshCw, CheckCircle, BarChart2, Plus, Trash2, UserPlus, Pencil, X, AlertCircle, MessageSquare, UploadCloud, FileSpreadsheet, Save, Smartphone } from 'lucide-react';
+import { Users, FileCheck, Settings, AlertTriangle, Download, Search, Filter, RefreshCw, CheckCircle, BarChart2, Plus, Trash2, UserPlus, Pencil, X, AlertCircle, MessageSquare, UploadCloud, FileSpreadsheet, Save, Smartphone, ImageIcon, Calendar, Clock, ArrowRight, Check, Lock, MapPin } from 'lucide-react';
 import { AppState, Candidate, ElectionPhase, Voter, VoterStatus, ElectionSettings } from '../types';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
@@ -116,6 +116,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .sort((a, b) => b.value - a.value);
   }, [state.voters]);
 
+  const votingSubCountyData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    state.voters.forEach(v => {
+      const key = v.votingSubCounty || 'Pending Selection';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [state.voters]);
+
   const verificationStats = useMemo(() => {
     const stats = {
       [VoterStatus.UNVERIFIED]: 0,
@@ -157,7 +168,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const downloadCSV = () => {
     const headers = ["MembershipID", "Name", "Phone", "Ward", "Constituency", "Voting Sub-County", "Status"];
     const rows = filteredVoters.map(v => 
-      [v.membershipId, v.name, v.phone, v.ward, v.constituency, v.votingSubCounty || "N/A", v.status].join(",")
+      [v.membershipId, `"${v.name}"`, v.phone, v.ward, v.constituency, v.votingSubCounty || "N/A", v.status].join(",")
     );
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -196,6 +207,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewCandidate(prev => ({ ...prev, avatarUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const startEditing = (candidate: Candidate) => {
     setNewCandidate({
       name: candidate.name,
@@ -221,11 +243,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handlePhaseChange = (newPhase: ElectionPhase) => {
     if (newPhase === state.phase) return;
     
+    // Validation Logic
+    if (state.phase === ElectionPhase.SETUP && newPhase !== ElectionPhase.SETUP) {
+      if (candidates.length === 0) {
+        alert("Setup Check Failed: No candidates found. You must add candidates to the ballot before proceeding to the Verification phase.");
+        return;
+      }
+      if (totalVoters === 0) {
+        if (!confirm("Warning: No voters found in the registry. Do you really want to start verification without any pre-registered voters?")) {
+          return;
+        }
+      }
+    }
+
     const messages = {
-      [ElectionPhase.SETUP]: "Are you sure you want to revert to SETUP phase? Voting data will be preserved but public access will be closed.",
-      [ElectionPhase.VERIFICATION]: "Start VERIFICATION phase? This will allow voters to register and verify their identity. Voting is not yet active.",
-      [ElectionPhase.VOTING]: "Start VOTING phase? This will open the polls for all verified voters. Ensure candidates are finalized as modifications are disabled.",
-      [ElectionPhase.ENDED]: "END ELECTION? This will close polls permanently and finalize results. This action cannot be undone."
+      [ElectionPhase.SETUP]: "Revert to SETUP phase?\n\nThis will close public access. Existing voting data is preserved.",
+      [ElectionPhase.VERIFICATION]: "Confirm Setup Completion?\n\nThis will LOCK the ballot configuration and START the Verification phase. Voters can register, but voting is not yet active.",
+      [ElectionPhase.VOTING]: "START VOTING?\n\nThis will open the polls for all verified voters. Ensure all candidates are finalized.",
+      [ElectionPhase.ENDED]: "END ELECTION?\n\nThis will close polls permanently and finalize results. This action cannot be undone."
     };
 
     if (window.confirm(messages[newPhase])) {
@@ -243,7 +278,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     
     const confirmed = window.confirm(
-      `Send SMS reminder to ${unverifiedCount} unverified voters?\n\nMessage: "Reminder: Please verify your identity to participate in the upcoming election."`
+      `Send SMS reminder to ${unverifiedCount} unverified voters?\n\nMessage: "Please complete your verification before the voting phase."`
     );
     
     if (confirmed) {
@@ -253,7 +288,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         if (voter.phone) {
           await sendSMS({
             phone: voter.phone,
-            message: `Hello ${voter.name.split(' ')[0]}, reminder to verify your registration for the upcoming election.`,
+            message: `Hello ${voter.name.split(' ')[0]}, reminder: Please complete your verification before the voting phase begins.`,
             settings: state.settings
           });
           sentCount++;
@@ -345,6 +380,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onUpdateSettings(settingsForm);
     alert("Settings updated successfully.");
   };
+
+  // Check if auto schedule is effectively enabled (boolean check)
+  const isAutoScheduleEnabled = !!state.settings.enableAutoSchedule;
+
+  // Helper to determine logical next phase
+  const getNextPhase = (current: ElectionPhase): ElectionPhase | null => {
+    if (current === ElectionPhase.SETUP) return ElectionPhase.VERIFICATION;
+    if (current === ElectionPhase.VERIFICATION) return ElectionPhase.VOTING;
+    if (current === ElectionPhase.VOTING) return ElectionPhase.ENDED;
+    return null;
+  };
+
+  const nextPhase = getNextPhase(state.phase);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -503,53 +551,108 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Phase Control */}
               <Card title="Election Lifecycle" className="lg:col-span-1 h-full">
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <p className="text-sm text-gray-600">Manage the current stage of the election process.</p>
-                  <div className="flex flex-col space-y-3">
-                    <Button 
-                      variant={state.phase === ElectionPhase.SETUP ? 'primary' : 'outline'}
-                      onClick={() => handlePhaseChange(ElectionPhase.SETUP)}
-                      className={`justify-start relative overflow-hidden ${state.phase === ElectionPhase.SETUP ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
-                      disabled={state.phase === ElectionPhase.SETUP}
-                    >
-                      <div className="flex flex-col items-start">
-                        <span className="font-semibold flex items-center"><span className="mr-2">1.</span> Setup Phase</span>
-                        <span className="text-[10px] font-normal opacity-80 text-left">Configure candidates & registry. Public access closed.</span>
+                  
+                  {isAutoScheduleEnabled && (
+                    <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-700 border border-blue-100 flex items-start gap-2">
+                      <Clock className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Auto-scheduling enabled</strong><br/>
+                        Manual phase controls are disabled. Disable auto-schedule in Settings to manually change phases.
                       </div>
-                    </Button>
-                    <Button 
-                      variant={state.phase === ElectionPhase.VERIFICATION ? 'primary' : 'outline'}
-                      onClick={() => handlePhaseChange(ElectionPhase.VERIFICATION)}
-                      className={`justify-start ${state.phase === ElectionPhase.VERIFICATION ? 'bg-amber-500 hover:bg-amber-600' : ''}`}
-                      disabled={state.phase === ElectionPhase.VERIFICATION}
+                    </div>
+                  )}
+
+                  {/* Next Phase Prominent Action */}
+                  {!isAutoScheduleEnabled && nextPhase && (
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-3">
+                      <h4 className="text-sm font-bold text-blue-900">Next Step</h4>
+                      <Button 
+                        fullWidth 
+                        variant="primary" 
+                        onClick={() => handlePhaseChange(nextPhase)}
+                        className="bg-blue-600 hover:bg-blue-700 shadow-md"
+                      >
+                        {nextPhase === ElectionPhase.VERIFICATION && "Start Verification"}
+                        {nextPhase === ElectionPhase.VOTING && "Start Voting"}
+                        {nextPhase === ElectionPhase.ENDED && "End Election"}
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                      <p className="text-xs text-blue-700">
+                        {nextPhase === ElectionPhase.VERIFICATION && "Locks setup & opens registration."}
+                        {nextPhase === ElectionPhase.VOTING && "Opens polls for verified voters."}
+                        {nextPhase === ElectionPhase.ENDED && "Finalizes results."}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col space-y-2 mt-4 pt-4 border-t border-gray-100">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Full Timeline</div>
+                    
+                    <button 
+                      onClick={() => !isAutoScheduleEnabled && handlePhaseChange(ElectionPhase.SETUP)}
+                      disabled={state.phase === ElectionPhase.SETUP || isAutoScheduleEnabled}
+                      className={`flex items-center w-full p-2 rounded text-sm transition-colors ${
+                        state.phase === ElectionPhase.SETUP 
+                          ? 'bg-purple-100 text-purple-800 font-bold ring-1 ring-purple-300' 
+                          : 'hover:bg-gray-50 text-gray-600'
+                      } ${isAutoScheduleEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                       <div className="flex flex-col items-start">
-                        <span className="font-semibold flex items-center"><span className="mr-2">2.</span> Verification Phase</span>
-                        <span className="text-[10px] font-normal opacity-80 text-left">Allow voters to verify identity. Voting closed.</span>
-                      </div>
-                    </Button>
-                    <Button 
-                      variant={state.phase === ElectionPhase.VOTING ? 'primary' : 'outline'}
-                      onClick={() => handlePhaseChange(ElectionPhase.VOTING)}
-                      className={`justify-start ${state.phase === ElectionPhase.VOTING ? 'bg-green-600 hover:bg-green-700' : ''}`}
-                      disabled={state.phase === ElectionPhase.VOTING}
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs mr-3 ${
+                        state.phase === ElectionPhase.SETUP ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-500'
+                      }`}>1</div>
+                      <div className="flex-1 text-left">Setup</div>
+                      {state.phase === ElectionPhase.SETUP && <Lock className="w-3 h-3 text-purple-600" />}
+                    </button>
+
+                    <button 
+                      onClick={() => !isAutoScheduleEnabled && handlePhaseChange(ElectionPhase.VERIFICATION)}
+                      disabled={state.phase === ElectionPhase.VERIFICATION || isAutoScheduleEnabled}
+                      className={`flex items-center w-full p-2 rounded text-sm transition-colors ${
+                        state.phase === ElectionPhase.VERIFICATION 
+                          ? 'bg-amber-100 text-amber-800 font-bold ring-1 ring-amber-300' 
+                          : 'hover:bg-gray-50 text-gray-600'
+                      } ${isAutoScheduleEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                       <div className="flex flex-col items-start">
-                        <span className="font-semibold flex items-center"><span className="mr-2">3.</span> Voting Phase</span>
-                        <span className="text-[10px] font-normal opacity-80 text-left">Polls open. Live balloting active.</span>
-                      </div>
-                    </Button>
-                    <Button 
-                      variant="danger"
-                      onClick={() => handlePhaseChange(ElectionPhase.ENDED)}
-                      className="justify-start"
-                      disabled={state.phase === ElectionPhase.ENDED}
+                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs mr-3 ${
+                        state.phase === ElectionPhase.VERIFICATION ? 'bg-amber-600 text-white' : 'bg-gray-200 text-gray-500'
+                      }`}>2</div>
+                      <div className="flex-1 text-left">Verification</div>
+                      {state.phase === ElectionPhase.VERIFICATION && <CheckCircle className="w-3 h-3 text-amber-600" />}
+                    </button>
+
+                    <button 
+                      onClick={() => !isAutoScheduleEnabled && handlePhaseChange(ElectionPhase.VOTING)}
+                      disabled={state.phase === ElectionPhase.VOTING || isAutoScheduleEnabled}
+                      className={`flex items-center w-full p-2 rounded text-sm transition-colors ${
+                        state.phase === ElectionPhase.VOTING 
+                          ? 'bg-green-100 text-green-800 font-bold ring-1 ring-green-300' 
+                          : 'hover:bg-gray-50 text-gray-600'
+                      } ${isAutoScheduleEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                       <div className="flex flex-col items-start">
-                        <span className="font-semibold flex items-center"><span className="mr-2">4.</span> End Election</span>
-                        <span className="text-[10px] font-normal opacity-80 text-left">Close polls and finalize results.</span>
-                      </div>
-                    </Button>
+                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs mr-3 ${
+                        state.phase === ElectionPhase.VOTING ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'
+                      }`}>3</div>
+                      <div className="flex-1 text-left">Voting</div>
+                      {state.phase === ElectionPhase.VOTING && <Smartphone className="w-3 h-3 text-green-600" />}
+                    </button>
+
+                    <button 
+                      onClick={() => !isAutoScheduleEnabled && handlePhaseChange(ElectionPhase.ENDED)}
+                      disabled={state.phase === ElectionPhase.ENDED || isAutoScheduleEnabled}
+                      className={`flex items-center w-full p-2 rounded text-sm transition-colors ${
+                        state.phase === ElectionPhase.ENDED 
+                          ? 'bg-red-100 text-red-800 font-bold ring-1 ring-red-300' 
+                          : 'hover:bg-gray-50 text-gray-600'
+                      } ${isAutoScheduleEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs mr-3 ${
+                        state.phase === ElectionPhase.ENDED ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-500'
+                      }`}>4</div>
+                      <div className="flex-1 text-left">Results</div>
+                      {state.phase === ElectionPhase.ENDED && <Check className="w-3 h-3 text-red-600" />}
+                    </button>
                   </div>
                 </div>
               </Card>
@@ -597,8 +700,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {activeTab === 'analytics' && (
            <div className="space-y-6 animate-fade-in">
+            {/* Verification Status Breakdown */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Verification Status Breakdown */}
               <Card title="Voter Verification Status">
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
@@ -626,8 +729,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </Card>
 
-              {/* Constituency Distribution */}
-              <Card title="Voters by Constituency">
+              {/* Voting Sub-County Distribution - Requested Chart */}
+              <Card title="Voters by Voting Location (Sub-County)">
+                 <div className="h-72 w-full">
+                   <ResponsiveContainer width="100%" height="100%">
+                     <BarChart data={votingSubCountyData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
+                       <XAxis type="number" hide />
+                       <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 11}} />
+                       <Tooltip cursor={{fill: '#f3f4f6'}} />
+                       <Bar dataKey="value" fill="#0ea5e9" radius={[0, 4, 4, 0]} barSize={20} name="Voters" />
+                     </BarChart>
+                   </ResponsiveContainer>
+                 </div>
+                 <div className="mt-4 text-xs text-gray-500 text-center">
+                    Distribution of verified voters across voting centers (Sub-Counties).
+                 </div>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+               {/* Constituency Distribution */}
+               <Card title="Voters by Constituency">
                 <div className="h-72 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={constituencyData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
@@ -640,30 +763,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </ResponsiveContainer>
                 </div>
               </Card>
-            </div>
 
-            {/* Ward Turnout Analysis */}
-            <Card title="Ward Turnout Analysis">
-              <div className="h-80 w-full">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <BarChart data={wardTurnout} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                     <XAxis dataKey="name" tick={{fontSize: 12}} />
-                     <YAxis />
-                     <Tooltip 
-                       contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                       cursor={{fill: '#f9fafb'}}
-                     />
-                     <Legend />
-                     <Bar dataKey="total" name="Registered Voters" fill="#e5e7eb" radius={[4, 4, 0, 0]} />
-                     <Bar dataKey="voted" name="Votes Cast" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                   </BarChart>
-                 </ResponsiveContainer>
-              </div>
-              <div className="mt-4 text-xs text-gray-500 text-center">
-                Comparison of total registered voters versus actual votes cast per ward.
-              </div>
-            </Card>
+               {/* Ward Turnout Analysis */}
+               <Card title="Ward Turnout Analysis">
+                  <div className="h-72 w-full">
+                     <ResponsiveContainer width="100%" height="100%">
+                       <BarChart data={wardTurnout} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                         <XAxis dataKey="name" tick={{fontSize: 12}} />
+                         <YAxis />
+                         <Tooltip 
+                           contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                           cursor={{fill: '#f9fafb'}}
+                         />
+                         <Legend />
+                         <Bar dataKey="total" name="Registered Voters" fill="#e5e7eb" radius={[4, 4, 0, 0]} />
+                         <Bar dataKey="voted" name="Votes Cast" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                       </BarChart>
+                     </ResponsiveContainer>
+                  </div>
+               </Card>
+            </div>
            </div>
         )}
 
@@ -780,9 +900,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                      <Filter className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3 pointer-events-none" />
                   </div>
                 </div>
-                <Button variant="outline" onClick={downloadCSV} className="flex items-center gap-2 text-xs">
-                   <Download className="h-3 w-3" /> Export CSV
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" onClick={handleBulkSMS} className="flex items-center gap-2 text-xs whitespace-nowrap">
+                     <MessageSquare className="h-3 w-3" /> Send Verification Reminder
+                  </Button>
+                  <Button variant="outline" onClick={downloadCSV} className="flex items-center gap-2 text-xs whitespace-nowrap">
+                     <Download className="h-3 w-3" /> Export CSV
+                  </Button>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -941,19 +1066,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         disabled={state.phase !== ElectionPhase.SETUP}
                       />
                     </div>
+                    
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Avatar URL (Optional)</label>
-                      <input 
-                        type="text" 
-                        value={newCandidate.avatarUrl}
-                        onChange={(e) => setNewCandidate({...newCandidate, avatarUrl: e.target.value})}
-                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                        placeholder="https://..."
-                        disabled={state.phase !== ElectionPhase.SETUP}
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Candidate Photo</label>
+                      <div className="flex items-center space-x-4">
+                        {newCandidate.avatarUrl ? (
+                          <img 
+                            src={newCandidate.avatarUrl} 
+                            alt="Preview" 
+                            className="w-12 h-12 rounded-full object-cover border border-gray-200 flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                            <ImageIcon className="w-6 h-6 text-gray-400" />
+                          </div>
+                        )}
+                        <label className={`flex-1 cursor-pointer flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors ${state.phase !== ElectionPhase.SETUP ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
+                          <UploadCloud className="w-4 h-4 mr-2" />
+                          <span>{newCandidate.avatarUrl ? 'Change Photo' : 'Upload Photo'}</span>
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            accept="image/*"
+                            onChange={handleAvatarUpload}
+                            disabled={state.phase !== ElectionPhase.SETUP}
+                          />
+                        </label>
+                      </div>
                     </div>
                     
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 pt-2">
                       <Button type="submit" fullWidth variant="primary" disabled={state.phase !== ElectionPhase.SETUP}>
                         {editingId ? (
                           <><Pencil className="w-4 h-4 mr-2" /> Update Candidate</>
@@ -1039,27 +1181,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {activeTab === 'settings' && (
           <div className="space-y-8 animate-fade-in">
             <Card title="General Configuration">
-               <form onSubmit={handleSaveSettings} className="space-y-4 max-w-2xl">
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Election Title</label>
-                   <input 
-                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                     value={settingsForm.electionTitle}
-                     onChange={e => setSettingsForm({...settingsForm, electionTitle: e.target.value})}
-                   />
-                   <p className="text-xs text-gray-500 mt-1">Displayed on the main landing page and reports.</p>
+               <form onSubmit={handleSaveSettings} className="space-y-6 max-w-2xl">
+                 <div className="space-y-4">
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Election Title</label>
+                     <input 
+                       className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                       value={settingsForm.electionTitle}
+                       onChange={e => setSettingsForm({...settingsForm, electionTitle: e.target.value})}
+                     />
+                     <p className="text-xs text-gray-500 mt-1">Displayed on the main landing page and reports.</p>
+                   </div>
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Organization Name</label>
+                     <input 
+                       className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                       value={settingsForm.organizationName}
+                       onChange={e => setSettingsForm({...settingsForm, organizationName: e.target.value})}
+                     />
+                   </div>
                  </div>
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Organization Name</label>
-                   <input 
-                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                     value={settingsForm.organizationName}
-                     onChange={e => setSettingsForm({...settingsForm, organizationName: e.target.value})}
-                   />
-                   <p className="text-xs text-gray-500 mt-1">The name of the body conducting the election.</p>
+
+                 <div className="border-t border-gray-200 pt-4">
+                   <div className="flex items-center justify-between mb-4">
+                     <h4 className="text-md font-semibold text-gray-800 flex items-center">
+                       <Calendar className="w-4 h-4 mr-2" /> Election Schedule
+                     </h4>
+                     <div className="flex items-center">
+                        <input 
+                          type="checkbox" 
+                          id="autoSchedule"
+                          checked={settingsForm.enableAutoSchedule || false}
+                          onChange={e => setSettingsForm({...settingsForm, enableAutoSchedule: e.target.checked})}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="autoSchedule" className="ml-2 block text-sm text-gray-900">
+                          Enable Automated Scheduling
+                        </label>
+                     </div>
+                   </div>
+                   
+                   <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 transition-opacity ${settingsForm.enableAutoSchedule ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                      <div>
+                         <label className="block text-xs font-medium text-gray-700 mb-1">Verification Phase Start</label>
+                         <input 
+                           type="datetime-local"
+                           className="w-full p-2 border rounded text-sm"
+                           value={settingsForm.verificationStartTime || ''}
+                           onChange={e => setSettingsForm({...settingsForm, verificationStartTime: e.target.value})}
+                         />
+                      </div>
+                      <div>
+                         <label className="block text-xs font-medium text-gray-700 mb-1">Verification Phase End</label>
+                         <input 
+                           type="datetime-local"
+                           className="w-full p-2 border rounded text-sm"
+                           value={settingsForm.verificationEndTime || ''}
+                           onChange={e => setSettingsForm({...settingsForm, verificationEndTime: e.target.value})}
+                         />
+                      </div>
+                      <div>
+                         <label className="block text-xs font-medium text-gray-700 mb-1">Voting Phase Start</label>
+                         <input 
+                           type="datetime-local"
+                           className="w-full p-2 border rounded text-sm"
+                           value={settingsForm.votingStartTime || ''}
+                           onChange={e => setSettingsForm({...settingsForm, votingStartTime: e.target.value})}
+                         />
+                      </div>
+                      <div>
+                         <label className="block text-xs font-medium text-gray-700 mb-1">Voting Phase End</label>
+                         <input 
+                           type="datetime-local"
+                           className="w-full p-2 border rounded text-sm"
+                           value={settingsForm.votingEndTime || ''}
+                           onChange={e => setSettingsForm({...settingsForm, votingEndTime: e.target.value})}
+                         />
+                      </div>
+                   </div>
+                   <p className="text-xs text-gray-500 mt-2">
+                     When enabled, the system will automatically switch phases based on these timestamps. Manual controls will be disabled.
+                   </p>
                  </div>
                  
-                 <div className="border-t border-gray-200 pt-4 mt-4">
+                 <div className="border-t border-gray-200 pt-4">
                    <h4 className="text-md font-semibold text-gray-800 flex items-center mb-4">
                      <Smartphone className="w-4 h-4 mr-2" /> SMS Gateway Configuration
                    </h4>

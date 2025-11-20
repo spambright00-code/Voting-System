@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { VoterPortal } from './components/VoterPortal';
 import { Button } from './components/ui/Button';
@@ -18,7 +18,8 @@ const initialState: AppState = {
   settings: {
     electionTitle: 'SecureVote',
     organizationName: 'Teacher Welfare Association',
-    smsSenderId: 'MobiPoll'
+    smsSenderId: 'MobiPoll',
+    enableAutoSchedule: false
   }
 };
 
@@ -48,6 +49,56 @@ function App() {
   
   // Session State
   const [activeVoter, setActiveVoter] = useState<Voter | null>(null);
+
+  // --- Automation Logic ---
+  useEffect(() => {
+    if (!state.settings.enableAutoSchedule) return;
+
+    const checkSchedule = () => {
+      const now = new Date().toISOString();
+      const { verificationStartTime, verificationEndTime, votingStartTime, votingEndTime } = state.settings;
+      
+      let newPhase = state.phase;
+
+      // Determine phase based on time windows
+      // Priority: ENDED > VOTING > VERIFICATION > SETUP
+      
+      if (votingEndTime && now >= votingEndTime) {
+        newPhase = ElectionPhase.ENDED;
+      } else if (votingStartTime && now >= votingStartTime) {
+        // If we are past voting start time (and logically before end time due to check above)
+        newPhase = ElectionPhase.VOTING;
+      } else if (verificationStartTime && now >= verificationStartTime) {
+        // We are past verification start
+        if (verificationEndTime && now >= verificationEndTime) {
+          // If verification has ended but voting hasn't started yet -> Back to SETUP (Closed)
+          newPhase = ElectionPhase.SETUP;
+        } else {
+          newPhase = ElectionPhase.VERIFICATION;
+        }
+      } else {
+        // Before any start time
+        newPhase = ElectionPhase.SETUP;
+      }
+
+      if (newPhase !== state.phase) {
+        console.log(`Auto-switching phase from ${state.phase} to ${newPhase}`);
+        setState(prev => ({ ...prev, phase: newPhase }));
+      }
+    };
+
+    // Check immediately and then every 10 seconds
+    checkSchedule();
+    const interval = setInterval(checkSchedule, 10000);
+    return () => clearInterval(interval);
+  }, [
+    state.settings.enableAutoSchedule, 
+    state.settings.verificationStartTime, 
+    state.settings.verificationEndTime, 
+    state.settings.votingStartTime, 
+    state.settings.votingEndTime,
+    state.phase
+  ]);
 
   const resetForms = () => {
     setVoterIdInput('');
