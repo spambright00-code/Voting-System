@@ -1,6 +1,6 @@
+
 import React, { useMemo } from 'react';
 import { AppState, VoterStatus } from '../../../types';
-import { Card } from '../../../components/ui/Card';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid, LineChart, Line } from 'recharts';
 
 interface AnalyticsProps {
@@ -8,9 +8,9 @@ interface AnalyticsProps {
 }
 
 const STATUS_COLORS = {
-  [VoterStatus.UNVERIFIED]: '#cbd5e1', // Slate 300
-  [VoterStatus.VERIFIED]: '#fbbf24', // Amber 400
-  [VoterStatus.VOTED]: '#10b981' // Emerald 500
+  [VoterStatus.UNVERIFIED]: '#e2e8f0', // Slate 200
+  [VoterStatus.VERIFIED]: '#8b5cf6',   // Violet 500
+  [VoterStatus.VOTED]: '#10b981'       // Emerald 500
 };
 
 export const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ state }) => {
@@ -81,11 +81,12 @@ export const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ state }) => {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-3 border border-gray-100 shadow-lg rounded-lg text-sm">
-          <p className="font-bold text-gray-800 mb-1">{label}</p>
+        <div className="bg-white/90 backdrop-blur-md p-3 border border-white/20 shadow-xl rounded-xl text-sm ring-1 ring-black/5">
+          <p className="font-bold text-slate-800 mb-1.5">{label}</p>
           {payload.map((entry: any, index: number) => (
-            <p key={index} style={{ color: entry.color }} className="font-medium">
-              {entry.name}: {entry.value}
+            <p key={index} style={{ color: entry.color }} className="font-semibold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{backgroundColor: entry.color}}></span>
+              {entry.name}: <span className="text-slate-600 ml-auto pl-4">{entry.value}</span>
             </p>
           ))}
         </div>
@@ -98,7 +99,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ state }) => {
     <div className="space-y-6 animate-fade-in">
       {/* Top Row: Pie & Line */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card title="Voter Status Distribution">
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-white/50 shadow-xl shadow-slate-200/50">
+          <h3 className="text-lg font-bold text-slate-900 mb-4">Voter Status Distribution</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -106,56 +108,65 @@ export const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ state }) => {
                   data={verificationStats}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
+                  innerRadius={80}
+                  outerRadius={120}
+                  paddingAngle={6}
                   dataKey="value"
                   stroke="none"
                 >
                   {verificationStats.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell key={`cell-${index}`} fill={entry.color} className="drop-shadow-sm transition-all duration-300 hover:opacity-80" />
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} wrapperStyle={{paddingTop: '20px'}} />
               </PieChart>
             </ResponsiveContainer>
           </div>
-        </Card>
+        </div>
 
-        <Card title="Verification Growth">
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-white/50 shadow-xl shadow-slate-200/50">
+          <h3 className="text-lg font-bold text-slate-900 mb-4">Verification Growth</h3>
            <div className="h-80 w-full">
              {verificationProgressData.length > 0 ? (
                <ResponsiveContainer width="100%" height="100%">
                  <LineChart data={verificationProgressData} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                   <XAxis dataKey="date" tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                   <YAxis tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} />
+                   <XAxis dataKey="date" tick={{fontSize: 11, fill: '#94a3b8'}} axisLine={false} tickLine={false} dy={10} />
+                   <YAxis tick={{fontSize: 11, fill: '#94a3b8'}} axisLine={false} tickLine={false} dx={-10} />
                    <Tooltip content={<CustomTooltip />} cursor={{stroke: '#cbd5e1', strokeDasharray: '3 3'}} />
                    <Line 
                     type="monotone" 
                     dataKey="count" 
-                    stroke="#6366f1" 
-                    strokeWidth={3} 
-                    dot={{r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff'}} 
-                    activeDot={{r: 6, strokeWidth: 0}} 
+                    stroke="#8b5cf6" 
+                    strokeWidth={4} 
+                    dot={{r: 0}} 
+                    activeDot={{r: 6, strokeWidth: 0, fill: '#8b5cf6'}} 
                     name="Verified Voters" 
+                    animationDuration={1500}
                    />
+                   <defs>
+                      <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
                  </LineChart>
                </ResponsiveContainer>
              ) : (
-               <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                 <span className="mb-1">No verification data yet</span>
+               <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                 <span className="mb-1 font-medium">No verification data yet</span>
                  <span className="text-xs opacity-75">Chart will update as voters verify</span>
                </div>
              )}
            </div>
-        </Card>
+        </div>
       </div>
 
       {/* Bottom Row: Bar Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card title="Voters by Location (Sub-County)">
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-white/50 shadow-xl shadow-slate-200/50">
+          <h3 className="text-lg font-bold text-slate-900 mb-4">Voters by Location</h3>
            <div className="h-80 w-full">
              <ResponsiveContainer width="100%" height="100%">
                <BarChart data={votingSubCountyData} layout="vertical" margin={{ top: 10, right: 30, left: 40, bottom: 10 }}>
@@ -163,27 +174,32 @@ export const AnalyticsDashboard: React.FC<AnalyticsProps> = ({ state }) => {
                  <XAxis type="number" hide />
                  <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} />
                  <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
-                 <Bar dataKey="value" fill="#0ea5e9" radius={[0, 4, 4, 0]} barSize={24} name="Verified Voters" />
+                 <Bar dataKey="value" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={20} name="Verified Voters" animationDuration={1500}>
+                    {votingSubCountyData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={`hsl(217, 91%, ${60 - index * 3}%)`} />
+                    ))}
+                 </Bar>
                </BarChart>
              </ResponsiveContainer>
            </div>
-        </Card>
+        </div>
 
-        <Card title="Ward Turnout Analysis">
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-white/50 shadow-xl shadow-slate-200/50">
+          <h3 className="text-lg font-bold text-slate-900 mb-4">Ward Turnout Analysis</h3>
           <div className="h-80 w-full">
              <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={wardTurnout} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
+               <BarChart data={wardTurnout} margin={{ top: 20, right: 30, left: 20, bottom: 10 }} barGap={0}>
                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                 <XAxis dataKey="name" tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                 <YAxis tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} />
+                 <XAxis dataKey="name" tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} dy={10} />
+                 <YAxis tick={{fontSize: 11, fill: '#64748b'}} axisLine={false} tickLine={false} dx={-10} />
                  <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
-                 <Legend iconType="circle" />
-                 <Bar dataKey="total" name="Registered" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={20} />
-                 <Bar dataKey="voted" name="Votes Cast" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
+                 <Legend iconType="circle" iconSize={8} wrapperStyle={{paddingTop: '20px'}} />
+                 <Bar dataKey="total" name="Registered" fill="#cbd5e1" radius={[6, 6, 0, 0]} barSize={16} />
+                 <Bar dataKey="voted" name="Votes Cast" fill="#10b981" radius={[6, 6, 0, 0]} barSize={16} />
                </BarChart>
              </ResponsiveContainer>
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );
