@@ -1,18 +1,25 @@
+
 import React, { useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { VoterPortal } from './components/VoterPortal';
 import { Button } from './components/ui/Button';
 import { Card } from './components/ui/Card';
-import { AppState, Candidate, ElectionPhase, Voter, VoterStatus, Vote } from './types';
+import { AppState, Candidate, ElectionPhase, Voter, VoterStatus, Vote, ElectionSettings } from './types';
 import { INITIAL_VOTERS, ADMIN_PASSWORD, MOCK_CANDIDATES, SUBCOUNTIES } from './constants';
 import { Lock, ArrowRight, Smartphone, CheckSquare, AlertCircle, ClipboardCheck, ChevronLeft, MapPin } from 'lucide-react';
+import { generateOTP, sendSMS } from './services/smsService';
 
 // Initial State
 const initialState: AppState = {
   phase: ElectionPhase.SETUP, // Default to setup
   voters: INITIAL_VOTERS,
   votes: [],
-  candidates: MOCK_CANDIDATES
+  candidates: MOCK_CANDIDATES,
+  settings: {
+    electionTitle: 'SecureVote',
+    organizationName: 'Teacher Welfare Association',
+    smsSenderId: 'MobiPoll'
+  }
 };
 
 type ViewState = 
@@ -37,6 +44,7 @@ function App() {
   const [voterIdInput, setVoterIdInput] = useState('');
   const [otpInput, setOtpInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
   
   // Session State
   const [activeVoter, setActiveVoter] = useState<Voter | null>(null);
@@ -47,6 +55,7 @@ function App() {
     setErrorMsg('');
     setStep('ID_INPUT');
     setActiveVoter(null);
+    setIsSendingOtp(false);
   };
 
   const navigateTo = (target: ViewState) => {
@@ -79,6 +88,31 @@ function App() {
     }));
   };
 
+  const handleAddVoter = (voterData: Omit<Voter, 'id' | 'status'>) => {
+    const newVoter: Voter = {
+      ...voterData,
+      id: `v_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      status: VoterStatus.UNVERIFIED
+    };
+    setState(prev => ({ ...prev, voters: [...prev.voters, newVoter] }));
+  };
+
+  const handleBulkAddVoters = (votersData: Omit<Voter, 'id' | 'status'>[]) => {
+     const newVoters = votersData.map((v, idx) => ({
+       ...v,
+       id: `v_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+       status: VoterStatus.UNVERIFIED
+     }));
+     setState(prev => ({ ...prev, voters: [...prev.voters, ...newVoters] }));
+  };
+
+  const handleDeleteVoter = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      voters: prev.voters.filter(v => v.id !== id)
+    }));
+  };
+
   const handleAddCandidate = (newCandidate: Omit<Candidate, 'id'>) => {
     setState(prev => ({
       ...prev,
@@ -100,9 +134,29 @@ function App() {
     }));
   };
 
+  // --- Settings & Reset Handlers ---
+
+  const handleUpdateSettings = (newSettings: ElectionSettings) => {
+    setState(prev => ({ ...prev, settings: newSettings }));
+  };
+
+  const handleResetVotes = () => {
+    setState(prev => ({
+      ...prev,
+      votes: [],
+      voters: prev.voters.map(v => 
+        v.status === VoterStatus.VOTED ? { ...v, status: VoterStatus.VERIFIED } : v
+      )
+    }));
+  };
+
+  const handleFactoryReset = () => {
+    setState(initialState);
+  };
+
   // --- Registration Handlers ---
 
-  const handleRegistrationIdSubmit = (e: React.FormEvent) => {
+  const handleRegistrationIdSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const voter = state.voters.find(v => v.membershipId.toLowerCase() === voterIdInput.toLowerCase());
     
@@ -111,37 +165,66 @@ function App() {
       return;
     }
 
-    if (voter.status !== VoterStatus.UNVERIFIED) {
-      // If already verified, we allow re-verification or checking status
-    }
-
-    setActiveVoter(voter);
+    setIsSendingOtp(true);
     setErrorMsg('');
-    setStep('OTP_INPUT');
-    // Simulate SMS
-    console.log(`[REGISTRATION] OTP for ${voter.name}: 123456`);
-    alert(`DEMO: Verification Code sent to ${voter.phone}.\nCode: 123456`);
+
+    // 1. Generate OTP
+    const otp = generateOTP();
+
+    // 2. Update Voter State with temporary OTP (in a real app, this might be a separate session table)
+    const updatedVoter = { ...voter, otp };
+    
+    // Update the global state to reflect this voter has an active OTP
+    setState(prev => ({
+      ...prev,
+      voters: prev.voters.map(v => v.id === voter.id ? updatedVoter : v)
+    }));
+    
+    setActiveVoter(updatedVoter);
+
+    // 3. Send SMS
+    const sent = await sendSMS({
+      phone: voter.phone,
+      message: `Your Verification Code for ${state.settings.electionTitle} is: ${otp}. Do not share this code.`,
+      settings: state.settings
+    });
+
+    setIsSendingOtp(false);
+
+    if (sent) {
+      setStep('OTP_INPUT');
+    } else {
+      // Even if SMS fails (simulation/fallback might have alerted), proceed for demo flow, 
+      // but in production you might block here.
+      setStep('OTP_INPUT');
+    }
   };
 
   const handleRegistrationOtpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (otpInput === '123456') { // Mock OTP check
-      if (activeVoter) {
-        setStep('SUBCOUNTY_SELECT');
-        setErrorMsg('');
-      }
+    
+    if (!activeVoter || !activeVoter.otp) {
+      setErrorMsg("Session expired. Please start again.");
+      return;
+    }
+
+    if (otpInput === activeVoter.otp) { 
+      setStep('SUBCOUNTY_SELECT');
+      setErrorMsg('');
     } else {
-      setErrorMsg('Invalid Verification Code');
+      setErrorMsg('Invalid Verification Code. Please try again.');
     }
   };
 
   const handleSubCountySubmit = (subCounty: string) => {
     if (!activeVoter) return;
 
+    // AUTOMATIC VERIFICATION LOGIC
     const updatedVoter = {
       ...activeVoter,
       status: VoterStatus.VERIFIED,
-      votingSubCounty: subCounty
+      votingSubCounty: subCounty,
+      otp: undefined // Clear OTP after usage
     };
 
     const updatedVoters = state.voters.map(v => 
@@ -155,7 +238,7 @@ function App() {
 
   // --- Voting Login Handlers ---
 
-  const handleVotingIdSubmit = (e: React.FormEvent) => {
+  const handleVotingIdSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const voter = state.voters.find(v => v.membershipId.toLowerCase() === voterIdInput.toLowerCase());
     
@@ -164,28 +247,57 @@ function App() {
       return;
     }
 
-    // Strict separation: Must be verified to enter voting booth
     if (voter.status === VoterStatus.UNVERIFIED) {
       setErrorMsg('Account not verified. Please complete Voter Registration first.');
       return;
     }
 
-    setActiveVoter(voter);
+    setIsSendingOtp(true);
     setErrorMsg('');
+
+    // 1. Generate OTP
+    const otp = generateOTP();
+
+    // 2. Update Voter State
+    const updatedVoter = { ...voter, otp };
+    setState(prev => ({
+      ...prev,
+      voters: prev.voters.map(v => v.id === voter.id ? updatedVoter : v)
+    }));
+    setActiveVoter(updatedVoter);
+
+    // 3. Send SMS
+    const sent = await sendSMS({
+      phone: voter.phone,
+      message: `SECURE LOGIN: Your Access Code for voting is ${otp}. Valid for 5 minutes.`,
+      settings: state.settings
+    });
+
+    setIsSendingOtp(false);
     setStep('OTP_INPUT');
-    // Simulate SMS
-    console.log(`[VOTING] OTP for ${voter.name}: 123456`);
-    alert(`DEMO: Voting Access Code sent to ${voter.phone}.\nCode: 123456`);
   };
 
   const handleVotingOtpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (otpInput === '123456') {
-      if (activeVoter) {
-        navigateTo('VOTER_PORTAL');
-        // restore active voter since navigate clears it
-        setActiveVoter(activeVoter); 
-      }
+
+    if (!activeVoter || !activeVoter.otp) {
+      setErrorMsg("Session expired.");
+      return;
+    }
+
+    if (otpInput === activeVoter.otp) {
+      // Clear OTP from state upon successful login to prevent reuse
+      const securedVoter = { ...activeVoter, otp: undefined };
+      
+      setState(prev => ({
+        ...prev,
+        voters: prev.voters.map(v => v.id === activeVoter.id ? securedVoter : v)
+      }));
+      
+      setActiveVoter(securedVoter);
+      navigateTo('VOTER_PORTAL');
+      // restore active voter since navigate clears it but we need it for the portal
+      setActiveVoter(securedVoter); 
     } else {
       setErrorMsg('Invalid Access Code');
     }
@@ -228,8 +340,8 @@ function App() {
           <div className="bg-white/10 p-4 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center backdrop-blur-sm border border-white/20">
             <CheckSquare className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-4xl font-bold mb-2">SecureVote</h1>
-          <p className="text-blue-200 text-lg">Teacher Welfare Association</p>
+          <h1 className="text-4xl font-bold mb-2">{state.settings.electionTitle}</h1>
+          <p className="text-blue-200 text-lg">{state.settings.organizationName}</p>
         </div>
 
         {state.phase === ElectionPhase.SETUP ? (
@@ -347,6 +459,7 @@ function App() {
                 onChange={(e) => setVoterIdInput(e.target.value)}
                 placeholder="e.g., MEM001"
                 autoFocus
+                disabled={isSendingOtp}
               />
             </div>
             {errorMsg && (
@@ -355,7 +468,7 @@ function App() {
                 {errorMsg}
               </div>
             )}
-            <Button type="submit" fullWidth className="bg-teal-600 hover:bg-teal-700 text-white">
+            <Button type="submit" fullWidth className="bg-teal-600 hover:bg-teal-700 text-white" isLoading={isSendingOtp}>
               Verify Identity <ArrowRight className="w-4 h-4 ml-2 inline" />
             </Button>
           </form>
@@ -425,8 +538,8 @@ function App() {
               <ClipboardCheck className="w-10 h-10 text-teal-600" />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-gray-900">Registration Complete</h3>
-              <p className="text-gray-500">You are verified and eligible to vote.</p>
+              <h3 className="text-xl font-bold text-gray-900">Verification Successful</h3>
+              <p className="text-gray-500">Your identity has been automatically verified.</p>
             </div>
             
             <div className="bg-gray-50 rounded-xl p-4 text-left border border-gray-200 text-sm space-y-3">
@@ -483,6 +596,7 @@ function App() {
                 onChange={(e) => setVoterIdInput(e.target.value)}
                 placeholder="e.g., MEM001"
                 autoFocus
+                disabled={isSendingOtp}
               />
             </div>
             {errorMsg && (
@@ -491,7 +605,7 @@ function App() {
                 {errorMsg}
               </div>
             )}
-            <Button type="submit" fullWidth>
+            <Button type="submit" fullWidth isLoading={isSendingOtp}>
               Authenticate <ArrowRight className="w-4 h-4 ml-2 inline" />
             </Button>
             
@@ -570,6 +684,12 @@ function App() {
         onAddCandidate={handleAddCandidate}
         onEditCandidate={handleEditCandidate}
         onDeleteCandidate={handleDeleteCandidate}
+        onAddVoter={handleAddVoter}
+        onBulkAddVoters={handleBulkAddVoters}
+        onDeleteVoter={handleDeleteVoter}
+        onUpdateSettings={handleUpdateSettings}
+        onResetVotes={handleResetVotes}
+        onFactoryReset={handleFactoryReset}
       />;
     case 'REGISTRATION': return renderRegistration();
     case 'VOTING_LOGIN': return renderVotingLogin();

@@ -1,3 +1,4 @@
+
 export enum ElectionPhase {
   SETUP = 'SETUP',
   VERIFICATION = 'VERIFICATION',
@@ -11,6 +12,13 @@ export enum VoterStatus {
   VOTED = 'VOTED'
 }
 
+export interface ElectionSettings {
+  electionTitle: string;
+  organizationName: string;
+  smsApiKey?: string;
+  smsSenderId?: string;
+}
+
 export interface Voter {
   id: string;
   membershipId: string;
@@ -20,7 +28,7 @@ export interface Voter {
   constituency: string;
   county: string;
   status: VoterStatus;
-  otp?: string; // In a real app, this would be hashed or stored server-side only
+  otp?: string; // Transient OTP for verification
   votingSubCounty?: string;
 }
 
@@ -49,4 +57,5 @@ export interface AppState {
   voters: Voter[];
   votes: Vote[];
   candidates: Candidate[];
+  settings: ElectionSettings;
 }
